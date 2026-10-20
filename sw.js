@@ -1,5 +1,5 @@
 /* 시드업자산 서비스 워커 — 앱 껍데기만 캐시한다. GitHub 요청은 건드리지 않는다(자료는 앱이 localStorage 에 암호문으로 담아둔다). */
-const CACHE = 'sidup-v1.1.0';
+const CACHE = 'sidup-v1.2.0';
 const THEMES = ['A', 'B', 'C'];
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'fonts/Orbit-Regular.woff2',
   ...THEMES.flatMap((k) => [`manifest-${k}.webmanifest`, `icons/${k}/icon-192.png`, `icons/${k}/apple-touch-icon.png`])];

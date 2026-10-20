@@ -1,11 +1,13 @@
-/* 시드업자산 — 가계부 + 주식 매매 코치 (소원저장소와 별도 앱)
+/* 시드업자산 — 클로드의 매매 조언 + 가계부 (소원저장소와 별도 앱)
+ * 1.2.0: 첫 화면 '조언' — 컨디션 원터치(<dir>/컨디션/YYYY-MM.json) · 장전 브리핑 2장(맥북 07:00 코스피·22:00 나스닥) ·
+ *        종목별 조언 + 일봉 차트(<dir>/차트/<코드>.png, 금액 정보 없음) · 직접 계획(옛 체크 탭)은 접어서 아래로.
  * 자료: 비공개 저장소 <dir>/data.enc.json (맥북 정리 스크립트가 PIN 으로 AES-GCM 암호화해 올림) → 이 휴대폰에서만 복호화.
  * 매매일지: <dir>/매매일지/YYYY-MM.jsonl 에 한 줄씩 덧붙임 (GitHub Contents API).
  * 열쇠(토큰)·PIN 은 이 기기의 localStorage 에만 둔다. 외부 요청은 api.github.com 하나뿐(CSP). 증권사·카드사 로그인은 없다. */
 (() => {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
@@ -23,6 +25,8 @@
     '공포': { obs: '동시 급락, 레버리지 청산·유동성 경색', act: '원인 분류 전 성급한 매수 금지' },
     '안정화': { obs: '변동성 둔화, 지지 회복, 주도주 재형성', act: '소액 탐색 후 확인되면 확대' },
   };
+  const CONDS = [{ v: 1, e: '😫', t: '최악' }, { v: 2, e: '😕', t: '별로' }, { v: 3, e: '😐', t: '보통' }, { v: 4, e: '🙂', t: '좋음' }, { v: 5, e: '😆', t: '최고' }];
+  const ACT_CLASS = { '관망': 'wait', '분할매수 검토': 'buy', '비중 축소 검토': 'trim', '손절선 점검': 'stop' };
   const PRINCIPLES = [
     '맞히는 사람이 아니라, 틀렸을 때 작게 인정하고 다시 하는 사람이 남는다.',
     '"좋아 보인다"는 트리거가 아니고, "본전 오면 판다"는 규칙이 아니다.',
@@ -65,7 +69,10 @@
   let dataFrom = '';                             // 'github' | 'local'
   let journal = store.get('sa.journal', {});     // { 'YYYY-MM': { entries, sha } }
   let memos = store.get('sa.memos', {});         // 지출 메모 { 'YYYY-MM': { entries, sha } }
-  let queue = store.get('sa.queue', []);         // 아직 못 올린 기록 { kind: 'journal'|'memo', month, entry, holdUntil }
+  let conds = store.get('sa.conds', {});         // 컨디션 { 'YYYY-MM': { days: { 'YYYY-MM-DD': { v, at } }, sha } }
+  let queue = store.get('sa.queue', []);         // 아직 못 올린 기록 { kind: 'journal'|'memo'|'cond', month, entry, holdUntil }
+  let condMonth = '';
+  let curTab = 'advice';
   let flushTimer = 0;
   let toastTimer = 0;
   let lastSaved = null;
@@ -228,11 +235,12 @@
     if (dataFrom === 'local' && lastError) showBanner(`저장소에서 새 자료를 못 받아 휴대폰에 담아둔 자료를 보여줘요 — ${esc(lastError)}`, 'is-err');
     if (!spendMonth) spendMonth = data.spending.thisMonth;
     renderAll();
+    if (curTab === 'advice') markBriefSeen();
     if (cfg.token) { loadJournal().then(() => { renderAll(); }).catch(() => {}); flush(); }
   }
 
   // ── 렌더 ────────────────────────────────────────────────
-  function renderAll() { renderToday(); renderSpend(); renderInvest(); renderCheck(); renderJournal(); renderReview(); renderBadges(); }
+  function renderAll() { renderAdvice(); renderToday(); renderSpend(); renderInvest(); renderCheck(); renderJournal(); renderReview(); renderBadges(); }
 
   // 지출 메모: 카드 거래(같은 날짜·같은 금액)와 겹치면 빼고, 나머지만 거래처럼 보여준다
   function memoEntries() {
@@ -259,6 +267,106 @@
     return n ? { krw: chg, pct: base ? chg / base * 100 : 0 } : null;
   }
   const arrow = (n) => n > 0 ? '▲' : n < 0 ? '▼' : '−';
+
+  // ── 조언 (첫 화면) ───────────────────────────────────────
+  function latestBriefAt() { const bs = Object.values(data?.advice?.briefs || {}); return bs.map((b) => b.at || '').sort().pop() || ''; }
+  function markBriefSeen() { const a = latestBriefAt(); if (a && a > store.get('sa.seenBrief', '')) store.set('sa.seenBrief', a); }
+  function shiftMonth(ym, d) { const [y, m] = ym.split('-').map(Number); return monthOf(new Date(y, m - 1 + d, 1)); }
+  function condDays(ym) {
+    const days = { ...(conds[ym]?.days || {}) };
+    for (const q of queue) if (q.kind === 'cond' && q.month === ym) days[q.entry.date] = { v: q.entry.v, at: q.entry.at, _pending: true };
+    return days;
+  }
+  const condToday = () => condDays(todayISO().slice(0, 7))[todayISO()]?.v || 0;
+  function setCondition(v) {
+    const d = nowD(), date = todayISO(), month = date.slice(0, 7);
+    const i = queue.findIndex((q) => q.kind === 'cond' && q.entry.date === date && !(flushing && q === queue[0]));
+    const entry = { id: makeId(d), date, v, at: isoLocal(d) };
+    if (i >= 0) queue[i] = { ...queue[i], entry, holdUntil: Date.now() + 1200 };
+    else queue.push({ kind: 'cond', month, entry, holdUntil: Date.now() + 1200 });
+    store.set('sa.queue', queue);
+    renderAdvice();
+    const c = CONDS.find((x) => x.v === v);
+    showToast(`오늘 컨디션 ${c.e} ${c.t} — 달력에 적었어요`);
+    clearTimeout(flushTimer); flushTimer = setTimeout(flush, 1250);
+  }
+  function renderCalendar() {
+    const thisM = todayISO().slice(0, 7);
+    if (!condMonth) condMonth = thisM;
+    const [y, m] = condMonth.split('-').map(Number), first = new Date(y, m - 1, 1).getDay(), last = new Date(y, m, 0).getDate();
+    const days = condDays(condMonth), today = todayISO();
+    $('#cLabel').textContent = monthKo(condMonth);
+    $('#cNext').disabled = condMonth >= thisM;
+    let html = DOW.map((w, i) => `<span class="cal-h${i === 0 ? ' sun' : ''}">${w}</span>`).join('');
+    for (let i = 0; i < first; i++) html += '<span class="cal-d is-blank"></span>';
+    for (let dd = 1; dd <= last; dd++) {
+      const iso = `${condMonth}-${pad(dd)}`, c = CONDS.find((x) => x.v === days[iso]?.v);
+      html += `<span class="cal-d${iso === today ? ' is-today' : ''}${c ? ' has c' + c.v : ''}" data-date="${iso}" title="${c ? esc(c.t) : ''}"><i>${dd}</i><b>${c ? c.e : ''}</b></span>`;
+    }
+    $('#condCal').innerHTML = html;
+    const n = Object.keys(days).filter((k) => k.startsWith(condMonth)).length;
+    const bad = Object.entries(days).filter(([k, x]) => k.startsWith(condMonth) && x.v <= 2).length;
+    $('#condSummary').textContent = `한 달 달력 · ${condMonth === thisM ? '이번 달' : monthKo(condMonth)} ${n}일 기록${bad ? ` · 나쁜 날 ${bad}일` : ''}`;
+  }
+  function condWarnHtml() {
+    const v = condToday(); if (!v || v > 2) return '';
+    const c = CONDS.find((x) => x.v === v);
+    return `<div class="cond-warn"><span class="wi">!</span><span>오늘 컨디션 ${c.e} — <b>오늘은 관망·소액만.</b> 컨디션도 매매 입력값이에요.</span></div>`;
+  }
+  function holdingOf(code) { for (const a of data.assets.accounts || []) for (const h of a.holdings || []) if (h.code === code) return { ...h, ccy: a.currency }; return null; }
+  function stampKo(at) { return at ? `${Number(at.slice(5, 7))}/${Number(at.slice(8, 10))} ${at.slice(11, 16)}` : ''; }
+  function renderAdvice() {
+    if (!data) return;
+    const v = condToday(), adv = data.advice;
+    $('#condRow').innerHTML = CONDS.map((c) => `<button type="button" class="cond-btn${c.v === v ? ' is-on' : ''}" data-v="${c.v}" aria-pressed="${c.v === v}" aria-label="${c.t}"><span class="ce">${c.e}</span><em>${c.t}</em></button>`).join('');
+    const pend = queue.some((q) => q.kind === 'cond');
+    $('#condNote').textContent = v ? (pend ? '올리는 중' : '오늘 기록됨') : '한 번 누르면 기록';
+    renderCalendar();
+    // 장전 브리핑 2장 — 생성 시각 최신이 위
+    const bs = Object.values(adv?.briefs || {}).filter((b) => b && b.lines).sort((a, b) => ((b.at || '') > (a.at || '') ? 1 : -1));
+    const warn = condWarnHtml(), nowMs = nowD().getTime();
+    $('#briefs').innerHTML = bs.length ? bs.map((b) => {
+      const old = b.at && nowMs - new Date(b.at).getTime() > 26 * 36e5;
+      return `<div class="card brief-card" data-slot="${esc(b.slot)}"><h3><span class="flag" aria-hidden="true">${b.slot === 'kr' ? '🇰🇷' : '🇺🇸'}</span>${esc(b.title || '')}<span class="right">${old ? '<span class="chip warn">지난 것</span> ' : ''}${esc(stampKo(b.at))} 생성</span></h3>` +
+        `<ol class="brief-lines">${b.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ol>` +
+        `${b.stance || b.phase ? `<div class="brief-meta">${b.stance ? `오늘 태도 <b>${esc(b.stance)}</b>` : ''}${b.phase ? ` · 국면 <b>${esc(b.phase)}</b>` : ''}</div>` : ''}${warn}</div>`;
+    }).join('') : '<div class="card brief-card"><div class="empty"><b>아직 장전 브리핑이 없어요</b>맥북이 평일 07:00(코스피)·22:00(나스닥)에 1~3줄로 써요</div></div>';
+    // 종목 조언
+    const items = adv?.items || [];
+    $('#advAt').textContent = adv?.itemsAt ? `${stampKo(adv.itemsAt)} · ${adv.itemsSlot === 'kr' ? '코스피' : '나스닥'} 장전 때` : '';
+    $('#advWarn').innerHTML = warn;
+    $('#advList').innerHTML = items.length ? items.map((it, i) => {
+      const h = holdingOf(it.code), ccy = it.ccy || h?.ccy || 'USD';
+      const cur = h?.cur ?? it.last?.close, chg = h?.chgPct ?? it.last?.chgPct;
+      const lv = it.levels || {};
+      return `<div class="adv-item" data-code="${esc(it.code)}">` +
+        `<div class="ai-top"><span class="ai-name">${esc(it.code)} <small>${esc(it.name || '')}</small></span><span class="act act-${ACT_CLASS[it.action] || 'wait'}">${esc(it.action || '관망')}</span></div>` +
+        `<div class="ai-sub"><span class="chip ${it.held ? '' : 'src'}">${it.held ? '보유' : '관심'}</span>${it.lev ? `<span class="chip warn">레버리지 ${esc(it.lev)}</span>` : ''}${it.phase ? `국면 <b>${esc(it.phase)}</b> · ` : ''}${esc(price(cur, ccy))} <span class="${sgn(chg)}">${esc(pct(chg, 2))}</span></div>` +
+        `<ul class="ai-why">${(it.reasons || []).map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` +
+        (it.invalid ? `<p class="ai-inv"><span>무효화</span>${esc(it.invalid)}</p>` : '') +
+        (it.risk ? `<p class="ai-risk"><span>레버리지</span>${esc(it.risk)}</p>` : '') +
+        (it.chart?.path ? `<details class="chart-fold"${i === 0 ? ' open' : ''} data-i="${i}"><summary>차트 그림 <span class="mute">${lv.invalid ? `무효 ${esc(price(lv.invalid, ccy))}` : ''}${lv.support?.length ? ` · 지지 ${esc(price(lv.support[0], ccy))}` : ''}${lv.resistance?.length ? ` · 저항 ${esc(price(lv.resistance[0], ccy))}` : ''}</span></summary><div class="chart-box"><img class="chart-img" alt="${esc(it.code)} 일봉 120일 차트 — 5·20·60일선, 거래량, 지지·저항·무효화 선" width="1080" height="760" hidden><p class="chart-msg hint small m0">차트 불러오는 중…</p></div>` +
+          (/^https:\/\//.test(it.tv || '') ? `<a class="tv-link" href="${esc(it.tv)}" target="_blank" rel="noopener noreferrer">트레이딩뷰로 열기 ↗</a>` : '') + '</details>' : '') +
+        '</div>';
+    }).join('') : '<div class="empty"><b>종목 조언이 아직 없어요</b>장전 브리핑 때 보유·관심 종목마다 함께 써요</div>';
+    $('#advNote').textContent = `${adv?.disclaimer || '참고용이에요. 최종 판단은 본인이 해요.'} 차트는 네이버 일봉으로 맥북이 그려요.`;
+    $$('#advList details.chart-fold[open]').forEach(showChart);
+  }
+  async function showChart(det) {
+    const it = (data?.advice?.items || [])[+det.dataset.i]; if (!it?.chart) return;
+    const img = $('.chart-img', det), msg = $('.chart-msg', det);
+    if (img.dataset.h === it.chart.h) return;
+    const key = 'sa.chart.' + it.code, cached = store.get(key, null);
+    const put = (b64) => { img.src = 'data:image/png;base64,' + b64; img.hidden = false; img.dataset.h = it.chart.h; msg.hidden = true; };
+    if (cached && cached.h === it.chart.h) { put(cached.b64); return; }
+    if (!cfg.token) { if (cached) put(cached.b64); else msg.textContent = '열쇠를 넣으면 차트를 받아와요'; return; }
+    try {
+      const meta = await gh(`${contentsPath(it.chart.path)}?ref=${encodeURIComponent(cfg.branch)}&t=${Date.now()}`);
+      let raw = meta.content; if (!raw && meta.size > 0) raw = (await gh(`${repoPath()}/git/blobs/${meta.sha}`)).content;
+      const b64 = String(raw || '').replace(/\s/g, ''); if (!b64) throw new Error('빈 파일');
+      put(b64); store.set(key, { h: it.chart.h, b64 });
+    } catch (e) { if (cached) put(cached.b64); else msg.textContent = `차트를 못 받았어요 (${e.message})`; }
+  }
 
   function renderToday() {
     const a = data.assets, t = a.totals, s = data.spending;
@@ -318,7 +426,8 @@
     const planned = es.some((e) => e.type === '계획'), logged = es.some((e) => e.type !== '계획');
     const t = data.assets.totals, items = [];
     if (dow === 0) items.push({ id: 'review', pri: 120, title: '주간 복기 하기', sub: '일요일 · 점수·반복 실수 확인', tab: 'review' });
-    items.push({ id: 'check', pri: wk && h < 9 ? 110 : wk && h < 16 ? 70 : 25, title: '매매 전 체크 열기', sub: planned ? '오늘 계획 저장됨' : wk && h < 9 ? '장 전 · 계획 없이 주문 금지' : '계획 없이 주문 금지', done: planned, tab: 'check' });
+    const bAt = latestBriefAt(), seen = bAt && bAt <= store.get('sa.seenBrief', '');
+    items.push({ id: 'check', pri: wk && h < 9 ? 110 : (wk && h >= 22) ? 100 : wk && h < 16 ? 70 : 25, title: '장전 조언 보기', sub: !bAt ? '맥북이 07:00·22:00에 써요' : seen ? (planned ? '확인함 · 계획 저장됨' : '확인함') : '새 브리핑 · 주문 전에', done: !!seen, tab: 'advice' });
     items.push({ id: 'log', pri: h >= 15 ? 90 : 55, title: '기록 남기기', sub: logged ? `오늘 ${es.length}건 남김` : '매매·관망 한 줄이면 돼요', done: logged, act: openJournal });
     if (t.unknown?.length) items.push({ id: 'capture', pri: h >= 15 ? 95 : 80, warn: true, title: '예수금 캡처 반영 필요', sub: '잔고 캡처 → "캡처 반영해줘"', act: () => openGuide('capture') });
     const gen = data.generatedAt ? new Date(data.generatedAt) : null;
@@ -334,9 +443,9 @@
   function renderBadges() {
     if (!data) return;
     const n = nowD(), h = n.getHours(), dow = n.getDay();
-    const preMarket = dow >= 1 && dow <= 5 && h < 9 && !todayEntries().some((e) => e.type === '계획');
-    const b1 = $('.nav-btn[data-tab="check"] .badge'), b2 = $('.nav-btn[data-tab="review"] .badge');
-    b1.hidden = !preMarket; b1.closest('.nav-btn').setAttribute('aria-label', preMarket ? '체크 (장 전 — 아직 계획 없음)' : '체크');
+    const bAt = latestBriefAt(), unseen = !!bAt && curTab !== 'advice' && bAt > store.get('sa.seenBrief', '');
+    const b1 = $('.nav-btn[data-tab="advice"] .badge'), b2 = $('.nav-btn[data-tab="review"] .badge');
+    b1.hidden = !unseen; b1.closest('.nav-btn').setAttribute('aria-label', unseen ? '조언 (새 장전 브리핑)' : '조언');
     b2.hidden = dow !== 0; b2.closest('.nav-btn').setAttribute('aria-label', dow === 0 ? '복기 (일요일 — 주간 복기)' : '복기');
   }
 
@@ -449,6 +558,7 @@
   // ── 매매일지·지출 메모 (같은 대기열로 저장소에 한 줄씩) ──
   const journalPath = (ym) => `${cfg.dir}/매매일지/${ym}.jsonl`;
   const memoPath = (ym) => `${cfg.dir}/지출메모/${ym}.jsonl`;
+  const condPath = (ym) => `${cfg.dir}/컨디션/${ym}.json`;
   const pathOf = (kind, ym) => kind === 'memo' ? memoPath(ym) : journalPath(ym);
   const boxOf = (kind) => kind === 'memo' ? memos : journal;
   function parseJsonl(text) { return text.split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); }
@@ -459,8 +569,11 @@
       journal[ym] = f ? { entries: parseJsonl(f.text), sha: f.sha } : { entries: [], sha: null };
       const g = await getFile(memoPath(ym));
       memos[ym] = g ? { entries: parseJsonl(g.text), sha: g.sha } : { entries: [], sha: null };
+      const c = await getFile(condPath(ym));
+      let days = {}; if (c) { try { days = JSON.parse(c.text).days || {}; } catch { /* 깨진 파일은 빈 달로 */ } }
+      conds[ym] = { days, sha: c ? c.sha : null };
     }
-    store.set('sa.journal', journal); store.set('sa.memos', memos);
+    store.set('sa.journal', journal); store.set('sa.memos', memos); store.set('sa.conds', conds);
   }
   function allEntries() {
     const seen = new Set(); const out = [];
@@ -505,6 +618,21 @@
         const op = queue[0], kind = op.kind || 'journal';
         const wait = (op.holdUntil || 0) - Date.now();
         if (wait > 0) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, wait + 50); break; }
+        if (kind === 'cond') {          // 컨디션: 달 파일(JSON)의 그날 값만 바꾼다(다시 누르면 덮어씀)
+          const path = condPath(op.month);
+          let obj = { version: 1, days: {} }, sha = null;
+          const f = await getFile(path);
+          if (f) { sha = f.sha; try { obj = JSON.parse(f.text); } catch { /* 새로 */ } }
+          obj.days = obj.days || {};
+          const cur = obj.days[op.entry.date];
+          if (!cur || (cur.at || '') <= op.entry.at) obj.days[op.entry.date] = { v: op.entry.v, at: op.entry.at };
+          try { sha = await putFile(path, JSON.stringify(obj, null, 1) + '\n', sha, `컨디션 ${op.entry.date} ${op.entry.v}`); }
+          catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
+          conds[op.month] = { days: obj.days, sha };
+          queue.shift(); store.set('sa.queue', queue); store.set('sa.conds', conds);
+          setPill('기록 올림', 'is-ok');
+          continue;
+        }
         const box = boxOf(kind), path = pathOf(kind, op.month);
         const cur = box[op.month] || { entries: [], sha: null };
         let text = '', sha = cur.sha;
@@ -528,7 +656,7 @@
       lastError = e.message; setPill(`대기 ${queue.length}`, 'is-err');
       showBanner(`기록을 아직 못 올렸어요(${esc(e.message)}). 휴대폰에 담아뒀다가 다시 올릴게요. <button id="retryBtn" type="button">다시 시도</button>`, 'is-err');
       $('#retryBtn').onclick = () => { hideBanner(); flush(); };
-    } finally { flushing = false; if (data) { renderToday(); renderJournal(); renderReview(); renderBadges(); } }
+    } finally { flushing = false; if (data) { renderAdvice(); renderToday(); renderJournal(); renderReview(); renderBadges(); } }
   }
 
   // ── 매매 전 체크 (코덱스 플레이북 순서: 스타일·보유기간 → 트리거 → 무효화 → 허용손실·계좌 → 수량) ──
@@ -752,10 +880,14 @@
 
   // ── 화면 전환·이벤트 ────────────────────────────────────
   function showTab(name) {
-    if (!$(`#tab-${name}`)) name = 'today';
+    if (name === 'check') { name = 'advice'; $('#planFold').open = true; }     // 옛 '체크' 탭 → 조언 탭 안 '직접 계획'
+    if (!$(`#tab-${name}`)) name = 'advice';
+    curTab = name;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.id === `tab-${name}`));
     $$('.nav-btn').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === name));
     store.set('sa.tab', name); window.scrollTo({ top: 0 });
+    if (name === 'advice') markBriefSeen();
+    if (data) renderBadges();
   }
   function bind() {
     $$('.nav-btn').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
@@ -774,8 +906,9 @@
     $('#pinForget').addEventListener('click', () => { cfg.pin = ''; sessionPin = ''; data = null; saveCfg(); $('#settings').close(); load(); });
     $('#forgetBtn').addEventListener('click', () => {
       if (!confirm('이 휴대폰의 열쇠·PIN·담아둔 자료·대기 중인 기록을 모두 지울까요? (저장소의 자료는 그대로예요)')) return;
-      ['sa.cfg', 'sa.enc', 'sa.journal', 'sa.memos', 'sa.queue', 'sa.check', 'sa.tab'].forEach((k) => store.del(k));
-      cfg = { ...DEFAULT_CFG, theme: cfg.theme }; sessionPin = ''; data = null; journal = {}; memos = {}; queue = []; saveCfg(); $('#settings').close(); load();
+      ['sa.cfg', 'sa.enc', 'sa.journal', 'sa.memos', 'sa.conds', 'sa.queue', 'sa.check', 'sa.tab', 'sa.seenBrief'].forEach((k) => store.del(k));
+      try { Object.keys(localStorage).filter((k) => k.startsWith('sa.chart.')).forEach((k) => store.del(k)); } catch { /* 무시 */ }
+      cfg = { ...DEFAULT_CFG, theme: cfg.theme }; sessionPin = ''; data = null; journal = {}; memos = {}; conds = {}; queue = []; saveCfg(); $('#settings').close(); load();
     });
     $('#saveMine').addEventListener('click', () => {
       cfg.income = +$('#income').value || 0; cfg.budget = +$('#budget').value || 0; const e = $('#emergencyIn').value.trim(); cfg.emergency = e === '' ? null : +e; saveCfg();
@@ -783,6 +916,11 @@
     });
     $('#logoGrid').addEventListener('click', (e) => { const b = e.target.closest('button[data-theme]'); if (!b) return; cfg.theme = b.dataset.theme; saveCfg(); applyTheme(cfg.theme); });
     $('#openGuide').addEventListener('click', () => openGuide());
+    // 조언
+    $('#condRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setCondition(+b.dataset.v); });
+    $('#cPrev').addEventListener('click', () => { condMonth = shiftMonth(condMonth, -1); renderCalendar(); });
+    $('#cNext').addEventListener('click', () => { condMonth = shiftMonth(condMonth, 1); renderCalendar(); });
+    $('#advList').addEventListener('toggle', (e) => { const d = e.target; if (d.matches && d.matches('details.chart-fold') && d.open) showChart(d); }, true);
     // 오늘
     $('#todo').addEventListener('click', (e) => { const b = e.target.closest('button[data-todo]'); if (!b) return; const it = todoActs[b.dataset.todo]; if (!it) return; if (it.tab) showTab(it.tab); else it.act(); });
     $('#unknownWarn').addEventListener('click', () => openGuide('capture'));
@@ -840,7 +978,7 @@
   applyTheme(cfg.theme);
   bind();
   $('#rememberPin').checked = cfg.rememberPin !== false;
-  showTab(store.get('sa.tab', 'today'));
+  showTab('advice');                             // 앱을 열면 언제나 조언부터
   load();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
