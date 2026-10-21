@@ -1,13 +1,15 @@
 /* 시드업자산 — 클로드의 매매 조언 + 가계부 (소원저장소와 별도 앱)
  * 1.2.0: 첫 화면 '조언' — 컨디션 원터치(<dir>/컨디션/YYYY-MM.json) · 장전 브리핑 2장(맥북 07:00 코스피·22:00 나스닥) ·
  *        종목별 조언 + 일봉 차트(<dir>/차트/<코드>.png, 금액 정보 없음) · 직접 계획(옛 체크 탭)은 접어서 아래로.
+ * 1.3.0: 종목 카드 = 뉴스 근거 2줄(🔴 팔 이유·🟢 살 이유, 맥북이 최근 7일 뉴스에서 고름) → 차트 분석 → 평단 계산기(몇 주 → 금액·새 평단·비중·현금).
+ *        직접 계획은 설정 ⑧ 고급으로, 중단 신호 점검은 컨디션 아래 한 줄 접힘.
  * 자료: 비공개 저장소 <dir>/data.enc.json (맥북 정리 스크립트가 PIN 으로 AES-GCM 암호화해 올림) → 이 휴대폰에서만 복호화.
  * 매매일지: <dir>/매매일지/YYYY-MM.jsonl 에 한 줄씩 덧붙임 (GitHub Contents API).
  * 열쇠(토큰)·PIN 은 이 기기의 localStorage 에만 둔다. 외부 요청은 api.github.com 하나뿐(CSP). 증권사·카드사 로그인은 없다. */
 (() => {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
   const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
@@ -73,6 +75,7 @@
   let queue = store.get('sa.queue', []);         // 아직 못 올린 기록 { kind: 'journal'|'memo'|'cond', month, entry, holdUntil }
   let condMonth = '';
   let curTab = 'advice';
+  const calcIn = {};                             // 평단 계산기 입력 { code: { q, p } } — 저장 없음(다시 그려도 유지만)
   let flushTimer = 0;
   let toastTimer = 0;
   let lastSaved = null;
@@ -329,6 +332,7 @@
       const old = b.at && nowMs - new Date(b.at).getTime() > 26 * 36e5;
       return `<div class="card brief-card" data-slot="${esc(b.slot)}"><h3><span class="flag" aria-hidden="true">${b.slot === 'kr' ? '🇰🇷' : '🇺🇸'}</span>${esc(b.title || '')}<span class="right">${old ? '<span class="chip warn">지난 것</span> ' : ''}${esc(stampKo(b.at))} 생성</span></h3>` +
         `<ol class="brief-lines">${b.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ol>` +
+        newsMini(b.news) +
         `${b.stance || b.phase ? `<div class="brief-meta">${b.stance ? `오늘 태도 <b>${esc(b.stance)}</b>` : ''}${b.phase ? ` · 국면 <b>${esc(b.phase)}</b>` : ''}</div>` : ''}${warn}</div>`;
     }).join('') : '<div class="card brief-card"><div class="empty"><b>아직 장전 브리핑이 없어요</b>맥북이 평일 07:00(코스피)·22:00(나스닥)에 1~3줄로 써요</div></div>';
     // 종목 조언
@@ -339,18 +343,97 @@
       const h = holdingOf(it.code), ccy = it.ccy || h?.ccy || 'USD';
       const cur = h?.cur ?? it.last?.close, chg = h?.chgPct ?? it.last?.chgPct;
       const lv = it.levels || {};
-      return `<div class="adv-item" data-code="${esc(it.code)}">` +
-        `<div class="ai-top"><span class="ai-name">${esc(it.code)} <small>${esc(it.name || '')}</small></span><span class="act act-${ACT_CLASS[it.action] || 'wait'}">${esc(it.action || '관망')}</span></div>` +
-        `<div class="ai-sub"><span class="chip ${it.held ? '' : 'src'}">${it.held ? '보유' : '관심'}</span>${it.lev ? `<span class="chip warn">레버리지 ${esc(it.lev)}</span>` : ''}${it.phase ? `국면 <b>${esc(it.phase)}</b> · ` : ''}${esc(price(cur, ccy))} <span class="${sgn(chg)}">${esc(pct(chg, 2))}</span></div>` +
+      return `<div class="adv-item" data-code="${esc(it.code)}" data-i="${i}">` +
+        `<div class="ai-top"><span class="ai-name">${esc(it.code)} <small>${esc(it.name || '')}</small></span><span class="ai-px">${esc(price(cur, ccy))} <span class="${sgn(chg)}">${esc(pct(chg, 2))}</span></span></div>` +
+        newsBlock(it) +
+        `<div class="ai-ana"><div class="ai-ana-h"><span class="ai-ana-t">차트 분석</span><span class="act act-${ACT_CLASS[it.action] || 'wait'}">${esc(it.action || '관망')}</span></div>` +
+        `<div class="ai-sub"><span class="chip ${it.held ? '' : 'src'}">${it.held ? '보유' : '관심'}</span>${it.lev ? `<span class="chip warn">레버리지 ${esc(it.lev)}</span>` : ''}${it.phase ? `국면 <b>${esc(it.phase)}</b>` : ''}</div>` +
         `<ul class="ai-why">${(it.reasons || []).map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` +
         (it.invalid ? `<p class="ai-inv"><span>무효화</span>${esc(it.invalid)}</p>` : '') +
         (it.risk ? `<p class="ai-risk"><span>레버리지</span>${esc(it.risk)}</p>` : '') +
         (it.chart?.path ? `<details class="chart-fold"${i === 0 ? ' open' : ''} data-i="${i}"><summary>차트 그림 <span class="mute">${lv.invalid ? `무효 ${esc(price(lv.invalid, ccy))}` : ''}${lv.support?.length ? ` · 지지 ${esc(price(lv.support[0], ccy))}` : ''}${lv.resistance?.length ? ` · 저항 ${esc(price(lv.resistance[0], ccy))}` : ''}</span></summary><div class="chart-box"><img class="chart-img" alt="${esc(it.code)} 일봉 120일 차트 — 5·20·60일선, 거래량, 지지·저항·무효화 선" width="1080" height="760" hidden><p class="chart-msg hint small m0">차트 불러오는 중…</p></div>` +
           (/^https:\/\//.test(it.tv || '') ? `<a class="tv-link" href="${esc(it.tv)}" target="_blank" rel="noopener noreferrer">트레이딩뷰로 열기 ↗</a>` : '') + '</details>' : '') +
+        '</div>' + calcBlock(it, h, ccy, cur) +
         '</div>';
     }).join('') : '<div class="empty"><b>종목 조언이 아직 없어요</b>장전 브리핑 때 보유·관심 종목마다 함께 써요</div>';
     $('#advNote').textContent = `${adv?.disclaimer || '참고용이에요. 최종 판단은 본인이 해요.'} 차트는 네이버 일봉으로 맥북이 그려요.`;
     $$('#advList details.chart-fold[open]').forEach(showChart);
+    $$('#advList .calc').forEach(calcRender);
+  }
+
+  // ── 뉴스 근거 2줄 (맥북 생성기가 최근 7일 뉴스 목록에서 고른 것만. 없으면 '해당 없음') ──
+  const safeUrl = (u) => (/^https:\/\//.test(u || '') ? u : '');
+  function newsLine(kind, n) {
+    const lab = kind === 'sell' ? '<span class="nl-k">🔴 팔 이유</span>' : '<span class="nl-k">🟢 살 이유</span>';
+    if (!n || !n.why) return `<li class="nl nl-${kind} is-none">${lab}<span class="nl-w">해당 없음</span></li>`;
+    const meta = `${esc(n.source || '')}${n.date ? ` · ${Number(n.date.slice(5, 7))}/${Number(n.date.slice(8, 10))}` : ''}`;
+    const u = safeUrl(n.url);
+    return `<li class="nl nl-${kind}">${lab}<span class="nl-w">${esc(n.why)}</span>` +
+      `<span class="nl-m">${meta}${u ? ` · <a class="nl-a" href="${esc(u)}" target="_blank" rel="noopener noreferrer" title="${esc(n.headline || '')}">원문 ↗</a>` : ''}</span></li>`;
+  }
+  function newsBlock(it) {
+    const nw = it.news;
+    if (!nw) return '<ul class="ai-news"><li class="nl is-none"><span class="nl-w">뉴스 근거는 다음 장전 조언부터 나와요</span></li></ul>';
+    return `<ul class="ai-news" aria-label="뉴스 근거">${newsLine('sell', nw.sell)}${newsLine('buy', nw.buy)}</ul>`;
+  }
+  function newsMini(nw) {
+    if (!nw || (!nw.sell && !nw.buy)) return '';
+    const one = (k, n) => { if (!n) return ''; const u = safeUrl(n.url); return `<li>${k === 'sell' ? '🔴' : '🟢'} ${esc(n.why)}${u ? ` <a class="nl-a" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(n.source || '원문')} ↗</a>` : ''}</li>`; };
+    return `<ul class="brief-news">${one('sell', nw.sell)}${one('buy', nw.buy)}</ul>`;
+  }
+
+  // ── 평단 계산기 (종목 카드 맨 아래, 저장 없음). 양수 = 더 사기, 음수 = 팔기 ──
+  const px2 = (p, ccy) => p == null || isNaN(p) ? '—' : ccy === 'USD' ? '$' + Number(p).toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : `${num(p)}원`;   // 계산기는 달러 소수 둘째 자리까지 고정
+  function calcBlock(it, h, ccy, cur) {
+    const v = calcIn[it.code] || {};
+    const pDef = cur != null ? +cur : '';
+    return `<div class="calc" data-code="${esc(it.code)}" data-ccy="${esc(ccy)}" data-def="${esc(pDef)}">` +
+      `<div class="calc-h">${h && h.qty > 0 ? `평단 계산기 <span class="mute">보유 ${num(h.qty, 4)}주 · 평단 ${esc(px2(h.avg, ccy))}</span>` : '평단 계산기 <span class="mute">아직 없음 · 첫 매수</span>'}</div>` +
+      `<div class="calc-in"><label><span>몇 주 더 사면? <em>(팔면 −)</em></span><input class="field calc-q" type="text" inputmode="decimal" autocomplete="off" placeholder="예: 10 또는 -10" value="${esc(v.q ?? '')}" aria-label="${esc(it.code)} 주수"></label>` +
+      `<label><span>가격 <em>(${ccy === 'USD' ? '달러' : '원'}, 기본 최신 시세)</em></span><input class="field calc-p" type="text" inputmode="decimal" autocomplete="off" placeholder="${esc(pDef)}" value="${esc(v.p ?? pDef)}" aria-label="${esc(it.code)} 가격"></label></div>` +
+      '<div class="calc-out" aria-live="polite"></div></div>';
+  }
+  const parseNum = (s) => { const t = String(s ?? '').replace(/[,\s원$주]/g, '').replace(/[−–—]/g, '-'); return t === '' || t === '-' ? null : Number(t); };
+  function calcCompute(code, q, p) {
+    const h = holdingOf(code), it = (data.advice?.items || []).find((x) => x.code === code) || {};
+    const ccy = h?.ccy || it.ccy || 'USD', fx = ccy === 'USD' ? (data.assets.fx?.rate || 1330) : 1;
+    const hq = h?.qty || 0, avg = h?.avg || 0, curP = h?.cur ?? it.last?.close ?? p;
+    const tot = data.assets.totals || {}, invest = tot.investKRW || 0, cash = tot.cashKRW || 0;
+    const evalNow = h?.evalKRW ?? hq * curP * fx;
+    const r = { ccy, fx, hq, avg, q, p, amt: Math.abs(q) * p, amtKRW: Math.abs(q) * p * fx, first: hq <= 0 && q > 0, cash };
+    if (q > 0) {
+      r.side = 'buy'; r.newQty = hq + q; r.newAvg = (hq * avg + q * p) / (hq + q);
+      r.avgChg = hq > 0 && avg > 0 ? (r.newAvg / avg - 1) * 100 : null;
+      r.weight = (evalNow + r.amtKRW) / (invest + r.amtKRW) * 100; r.cashLeft = cash - r.amtKRW;
+    } else {
+      const sq = Math.min(-q, hq); r.side = 'sell'; r.over = -q > hq; r.sellQty = sq; r.amt = sq * p; r.amtKRW = sq * p * fx;
+      r.newQty = hq - sq; r.newAvg = r.newQty > 0 ? avg : null; r.realized = sq * (p - avg); r.realizedKRW = r.realized * fx;
+      r.realizedPct = avg > 0 ? (p / avg - 1) * 100 : null;
+      r.weight = invest - r.amtKRW > 0 ? Math.max(0, evalNow - r.amtKRW) / (invest - r.amtKRW) * 100 : 0; r.cashLeft = cash + r.amtKRW;
+    }
+    return r;
+  }
+  function calcRender(box) {
+    const code = box.dataset.code, out = $('.calc-out', box);
+    const q = parseNum($('.calc-q', box).value), pIn = parseNum($('.calc-p', box).value), p = pIn ?? parseNum(box.dataset.def);
+    if (q == null || q === 0) { out.innerHTML = ''; return; }
+    if (isNaN(q) || !(p > 0)) { out.innerHTML = '<p class="msg err">주수와 가격을 숫자로 넣어 주세요</p>'; return; }
+    const r = calcCompute(code, q, p), usd = r.ccy === 'USD';
+    const money = (v) => usd ? `${px2(v, 'USD')} <small>(${esc(won(v * r.fx))})</small>` : esc(won(v));
+    const rows = [];
+    if (r.side === 'buy') {
+      rows.push(['매수 금액', `${money(r.amt)}`, `${num(q, 4)}주 × ${esc(px2(p, r.ccy))}${usd ? ` · 환율 ${num(r.fx, 1)}원` : ''}`]);
+      rows.push([r.first ? '첫 매수 평단' : '새 평단', `<b class="calc-big">${esc(px2(r.newAvg, r.ccy))}</b>`, r.first ? '첫 매수' : `지금 ${esc(px2(r.avg, r.ccy))} → 평단 변화 <b class="${sgn(r.avgChg)}">${esc(pct(r.avgChg, 1).replace('-', '−'))}</b>`]);
+      rows.push(['매수 뒤 비중', `${num(r.weight, 1)}%`, `투자자산 중 · ${num(r.newQty, 4)}주`]);
+      rows.push(['현금', r.cashLeft >= 0 ? `<span class="good">${esc(won(r.cashLeft))} 남음</span>` : `<span class="bad">${esc(won(-r.cashLeft))} 부족</span>`, `현금 ${esc(won(r.cash))} 대비`]);
+    } else {
+      if (r.hq <= 0) { out.innerHTML = '<p class="msg err">보유가 없어 팔 수 없어요</p>'; return; }
+      rows.push(['매도 금액', `${money(r.amt)}`, `${num(r.sellQty, 4)}주 × ${esc(px2(p, r.ccy))}${r.over ? ' · 보유 수량까지만' : ''}`]);
+      rows.push(['남는 수량', `<b class="calc-big">${num(r.newQty, 4)}주</b>`, r.newQty > 0 ? `평단 ${esc(px2(r.avg, r.ccy))} 그대로` : '전부 매도']);
+      rows.push(['실현 손익', `<span class="${sgn(r.realized)}">${r.realized >= 0 ? '+' : '−'}${usd ? `${px2(Math.abs(r.realized), 'USD')} <small>(${esc(won(Math.abs(r.realizedKRW)))})</small>` : esc(won(Math.abs(r.realized)))}</span>`, r.realizedPct == null ? '' : `평단 대비 ${esc(pct(r.realizedPct, 1))}`]);
+      rows.push(['매도 뒤 비중', `${num(r.weight, 1)}%`, `현금 ${esc(won(r.cashLeft))}로`]);
+    }
+    out.innerHTML = `<dl class="calc-kv">${rows.map(([k, v, s2]) => `<dt>${k}</dt><dd>${v}${s2 ? `<small class="calc-s">${s2}</small>` : ''}</dd>`).join('')}</dl>`;
   }
   async function showChart(det) {
     const it = (data?.advice?.items || [])[+det.dataset.i]; if (!it?.chart) return;
@@ -880,7 +963,7 @@
 
   // ── 화면 전환·이벤트 ────────────────────────────────────
   function showTab(name) {
-    if (name === 'check') { name = 'advice'; $('#planFold').open = true; }     // 옛 '체크' 탭 → 조언 탭 안 '직접 계획'
+    if (name === 'check') { openSettings(); $('#planFold').open = true; $('#planFold').scrollIntoView({ block: 'start' }); name = 'advice'; }   // 옛 '체크' 탭 → 설정 ⑧ 고급 '거래 계획'
     if (!$(`#tab-${name}`)) name = 'advice';
     curTab = name;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.id === `tab-${name}`));
@@ -920,6 +1003,10 @@
     $('#condRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setCondition(+b.dataset.v); });
     $('#cPrev').addEventListener('click', () => { condMonth = shiftMonth(condMonth, -1); renderCalendar(); });
     $('#cNext').addEventListener('click', () => { condMonth = shiftMonth(condMonth, 1); renderCalendar(); });
+    $('#advList').addEventListener('input', (e) => {
+      const box = e.target.closest('.calc'); if (!box) return;
+      calcIn[box.dataset.code] = { q: $('.calc-q', box).value, p: $('.calc-p', box).value }; calcRender(box);
+    });
     $('#advList').addEventListener('toggle', (e) => { const d = e.target; if (d.matches && d.matches('details.chart-fold') && d.open) showChart(d); }, true);
     // 오늘
     $('#todo').addEventListener('click', (e) => { const b = e.target.closest('button[data-todo]'); if (!b) return; const it = todoActs[b.dataset.todo]; if (!it) return; if (it.tab) showTab(it.tab); else it.act(); });

@@ -59,7 +59,7 @@
   </section>
 
   <main id="main" hidden>
-    <!-- 조언(첫 화면): 컨디션 원터치·달력 → 장전 브리핑 2장(최신 위) → 클로드의 종목 조언(차트) → 직접 계획(접힘) -->
+    <!-- 조언(첫 화면, 1.3.0): 컨디션 원터치·달력·중단 신호(접힘) → 장전 브리핑 2장(최신 위) → 종목 카드(뉴스 팔/살 이유 → 차트 분석 → 평단 계산기). 직접 계획은 설정 ⑧ 고급으로 -->
     <section id="tab-advice" class="tab is-active" aria-label="조언">
       <div class="card cond-card">
         <h3>오늘 컨디션 <span id="condNote" class="right"></span></h3>
@@ -68,6 +68,7 @@
           <div class="month-nav cal-nav"><button id="cPrev" type="button" aria-label="이전 달">◀</button><b id="cLabel">—</b><button id="cNext" type="button" aria-label="다음 달">▶</button></div>
           <div id="condCal" class="cal" role="grid" aria-label="컨디션 달력"></div>
         </details>
+        <details id="stopFold" class="fold inner-fold stop-fold"><summary id="stopSummary">즉시 중단 신호 점검</summary><div id="stopChips" class="chips"></div><div id="stopVerdict"></div></details>
       </div>
       <div id="briefs" class="briefs"></div>
       <div class="card adv-card">
@@ -76,71 +77,6 @@
         <div id="advList"></div>
         <p id="advNote" class="hint small m0"></p>
       </div>
-      <details id="planFold" class="card fold plan-fold"><summary>직접 계획 <span class="mute">수량 계산·중단 신호·발행본</span></summary>
-
-      <div class="card sub">
-        <h3>시황 발행본 <span id="briefDate" class="right"></span></h3>
-        <div id="briefHead" class="brief-head"></div>
-        <div id="brief" class="brief" hidden></div>
-        <button id="briefMore" class="text-btn" type="button">전체 보기</button>
-      </div>
-      <div class="card sub">
-        <h3>시장 국면 · 중단 신호</h3>
-        <div id="phaseChips" class="chips scroll" aria-label="시장 국면"></div>
-        <div id="phaseInfo" class="phase"></div>
-        <details id="stopFold" class="fold inner-fold"><summary id="stopSummary">즉시 중단 신호 점검</summary><div id="stopChips" class="chips"></div></details>
-        <div id="stopVerdict"></div>
-      </div>
-      <div class="card sub">
-        <h3>거래 계획 <span class="right">빠지면 거래 금지</span></h3>
-        <form id="checkForm" autocomplete="off">
-          <div class="step" data-step="0">
-            <div class="step-h"><i>1</i>종목·방향<em class="st"></em></div>
-            <div class="grid2">
-              <div><label class="sr-only" for="ckName">종목</label><input id="ckName" class="field" type="text" placeholder="종목 예: SOXL"></div>
-              <div><label class="sr-only" for="ckSide">방향</label><select id="ckSide" class="field"><option>매수</option><option>매도</option></select></div>
-            </div>
-          </div>
-          <div class="step" data-step="1">
-            <div class="step-h"><i>2</i>스타일·보유기간<em class="st"></em></div>
-            <div class="grid2">
-              <div><label class="sr-only" for="ckStyle">스타일</label><select id="ckStyle" class="field"><option value="">스타일</option></select></div>
-              <div><label class="sr-only" for="ckHold">보유기간</label><select id="ckHold" class="field"><option value="">보유기간</option></select></div>
-            </div>
-          </div>
-          <div class="step" data-step="2">
-            <div class="step-h"><i>3</i>트리거 — ___가 확인될 때만 진입<em class="st"></em></div>
-            <label class="sr-only" for="ckTrigger">트리거</label>
-            <textarea id="ckTrigger" class="field" rows="2" placeholder="관찰 가능한 가격·거래대금·공시·이벤트 + 기준 시각"></textarea>
-          </div>
-          <div class="step" data-step="3">
-            <div class="step-h"><i>4</i>무효화 — ___면 틀렸다고 인정<em class="st"></em></div>
-            <label class="sr-only" for="ckInvalid">무효화</label>
-            <textarea id="ckInvalid" class="field" rows="2" placeholder="가격(기술) + 이유(논리) 따로. 갭 때 행동도"></textarea>
-            <div class="grid3">
-              <div><label class="lbl" for="ckEntry">진입가</label><input id="ckEntry" class="field" type="number" inputmode="decimal" step="any" placeholder="0"></div>
-              <div><label class="lbl" for="ckStop">손절가</label><input id="ckStop" class="field" type="number" inputmode="decimal" step="any" placeholder="0"></div>
-              <div><label class="lbl" for="ckCcy">통화</label><select id="ckCcy" class="field"><option value="KRW">원</option><option value="USD">달러</option></select></div>
-            </div>
-          </div>
-          <div class="step" data-step="4">
-            <div class="step-h"><i>5</i>허용손실·계좌<em class="st"></em></div>
-            <div class="grid2">
-              <div><label class="lbl" for="ckAccount">계좌자산(원)</label><input id="ckAccount" class="field" type="number" inputmode="numeric" placeholder="자동"></div>
-              <div><label class="lbl" for="ckRisk">거래당 위험률 %</label><input id="ckRisk" class="field" type="number" inputmode="decimal" step="0.1" placeholder="예: 1"></div>
-            </div>
-            <details class="fold inner-fold"><summary>수수료 여유·단일종목 한도</summary>
-              <div class="grid2">
-                <div><label class="lbl" for="ckSlip">수수료·슬리피지 %</label><input id="ckSlip" class="field" type="number" inputmode="decimal" step="0.1" value="0.3"></div>
-                <div><label class="lbl" for="ckCap">단일종목 한도 %</label><input id="ckCap" class="field" type="number" inputmode="decimal" step="1" value="20"></div>
-              </div>
-            </details>
-          </div>
-        </form>
-        <div id="verdict" class="verdict"></div>
-        <div class="btn-row"><button id="savePlan" class="btn pri" type="button" disabled>계획을 매매일지에 저장</button><button id="resetCheck" class="btn small" type="button">비우기</button></div>
-      </div>
-      </details>
     </section>
 
     <!-- 오늘: 총자산 한 장 → 오늘 할 일 3개 → 2×2 타일 → 최근 지출 3건 (한 화면) -->
@@ -293,6 +229,73 @@
       <div class="btn-row"><button id="openGuide" class="btn small" type="button">넣는 법 보기</button><button id="refreshBtn" class="btn small" type="button">새로고침</button></div>
     </div>
 
+    <div class="card" id="advancedCard">
+      <h3>⑧ 고급</h3>
+      <p class="hint small">거래 계획은 이제 직접 세우지 않아도 돼요. 조언 탭의 종목 카드와 평단 계산기를 보면 돼요. 예전 계획표가 필요할 때만 열어요.</p>
+        <details id="planFold" class="fold plan-fold"><summary>거래 계획 (옛 체크 탭) <span class="mute">수량 계산·국면·발행본</span></summary>
+
+        <div class="card sub">
+          <h3>시황 발행본 <span id="briefDate" class="right"></span></h3>
+          <div id="briefHead" class="brief-head"></div>
+          <div id="brief" class="brief" hidden></div>
+          <button id="briefMore" class="text-btn" type="button">전체 보기</button>
+        </div>
+        <div class="card sub">
+          <h3>시장 국면</h3>
+          <div id="phaseChips" class="chips scroll" aria-label="시장 국면"></div>
+          <div id="phaseInfo" class="phase"></div>
+        </div>
+        <div class="card sub">
+          <h3>거래 계획 <span class="right">빠지면 거래 금지</span></h3>
+          <form id="checkForm" autocomplete="off">
+            <div class="step" data-step="0">
+              <div class="step-h"><i>1</i>종목·방향<em class="st"></em></div>
+              <div class="grid2">
+                <div><label class="sr-only" for="ckName">종목</label><input id="ckName" class="field" type="text" placeholder="종목 예: SOXL"></div>
+                <div><label class="sr-only" for="ckSide">방향</label><select id="ckSide" class="field"><option>매수</option><option>매도</option></select></div>
+              </div>
+            </div>
+            <div class="step" data-step="1">
+              <div class="step-h"><i>2</i>스타일·보유기간<em class="st"></em></div>
+              <div class="grid2">
+                <div><label class="sr-only" for="ckStyle">스타일</label><select id="ckStyle" class="field"><option value="">스타일</option></select></div>
+                <div><label class="sr-only" for="ckHold">보유기간</label><select id="ckHold" class="field"><option value="">보유기간</option></select></div>
+              </div>
+            </div>
+            <div class="step" data-step="2">
+              <div class="step-h"><i>3</i>트리거 — ___가 확인될 때만 진입<em class="st"></em></div>
+              <label class="sr-only" for="ckTrigger">트리거</label>
+              <textarea id="ckTrigger" class="field" rows="2" placeholder="관찰 가능한 가격·거래대금·공시·이벤트 + 기준 시각"></textarea>
+            </div>
+            <div class="step" data-step="3">
+              <div class="step-h"><i>4</i>무효화 — ___면 틀렸다고 인정<em class="st"></em></div>
+              <label class="sr-only" for="ckInvalid">무효화</label>
+              <textarea id="ckInvalid" class="field" rows="2" placeholder="가격(기술) + 이유(논리) 따로. 갭 때 행동도"></textarea>
+              <div class="grid3">
+                <div><label class="lbl" for="ckEntry">진입가</label><input id="ckEntry" class="field" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+                <div><label class="lbl" for="ckStop">손절가</label><input id="ckStop" class="field" type="number" inputmode="decimal" step="any" placeholder="0"></div>
+                <div><label class="lbl" for="ckCcy">통화</label><select id="ckCcy" class="field"><option value="KRW">원</option><option value="USD">달러</option></select></div>
+              </div>
+            </div>
+            <div class="step" data-step="4">
+              <div class="step-h"><i>5</i>허용손실·계좌<em class="st"></em></div>
+              <div class="grid2">
+                <div><label class="lbl" for="ckAccount">계좌자산(원)</label><input id="ckAccount" class="field" type="number" inputmode="numeric" placeholder="자동"></div>
+                <div><label class="lbl" for="ckRisk">거래당 위험률 %</label><input id="ckRisk" class="field" type="number" inputmode="decimal" step="0.1" placeholder="예: 1"></div>
+              </div>
+              <details class="fold inner-fold"><summary>수수료 여유·단일종목 한도</summary>
+                <div class="grid2">
+                  <div><label class="lbl" for="ckSlip">수수료·슬리피지 %</label><input id="ckSlip" class="field" type="number" inputmode="decimal" step="0.1" value="0.3"></div>
+                  <div><label class="lbl" for="ckCap">단일종목 한도 %</label><input id="ckCap" class="field" type="number" inputmode="decimal" step="1" value="20"></div>
+                </div>
+              </details>
+            </div>
+          </form>
+          <div id="verdict" class="verdict"></div>
+          <div class="btn-row"><button id="savePlan" class="btn pri" type="button" disabled>계획을 매매일지에 저장</button><button id="resetCheck" class="btn small" type="button">비우기</button></div>
+        </div>
+        </details>
+    </div>
     <div class="card">
       <h3>⑦ 지우기</h3>
       <div class="btn-row"><button id="forgetBtn" class="btn danger small" type="button">이 휴대폰에서 열쇠·PIN·저장본 모두 지우기</button></div>
