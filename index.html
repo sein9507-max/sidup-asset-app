@@ -48,6 +48,12 @@
       <img id="lockLogo" class="lock-logo" src="icons/1/icon-192.png" alt="" width="104" height="104">
       <h2 id="lockTitle">금고가 잠겨 있어요</h2>
       <p id="lockHint">PIN 6자리를 넣으면 저장소의 암호화 자료를 이 휴대폰에서만 풀어요.</p>
+      <div id="lockKey" class="pin-box" hidden>
+        <label class="sr-only" for="lockToken">GitHub 열쇠</label>
+        <input id="lockToken" class="field" type="password" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="열쇠(ghp_…) 또는 소원저장소 복구 링크 붙여넣기">
+        <button id="lockKeyBtn" class="btn pri" type="button">넣기</button>
+      </div>
+      <p id="lockKeyHelp" class="hint small" hidden>소원저장소 설정 ①의 '📋 열쇠 복구 링크 복사'를 눌러 여기 붙여넣으면 끝이에요. 새로 만들려면 <a id="lockTokenLink" target="_blank" rel="noopener noreferrer">만료 없는 열쇠 만들기 ↗</a> (Expiration은 No expiration, repo 체크된 그대로 맨 아래 Generate token)</p>
       <div class="pin-box">
         <label class="sr-only" for="pin">PIN</label>
         <input id="pin" class="field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="••••••">
@@ -174,7 +180,7 @@
       <h3>① 저장소 열쇠</h3>
       <p class="hint">내 비공개 저장소(<b id="repoLabel"></b>)의 암호화 자료를 읽고 매매일지를 쌓으려면 GitHub 전용 열쇠가 필요해요. 열쇠는 이 휴대폰 안에만 저장돼요.</p>
       <label class="sr-only" for="token">GitHub 열쇠</label>
-      <input id="token" class="field" type="password" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_… 붙여넣기">
+      <input id="token" class="field" type="password" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ghp_… 또는 소원저장소 복구 링크 붙여넣기">
       <div class="btn-row"><button id="connectBtn" class="btn pri small" type="button">저장하고 연결 확인</button><button id="rescueBtn" class="btn small" type="button">📋 열쇠 복구 링크 복사</button></div>
       <p id="connectMsg" class="msg" role="status"></p>
       <p class="hint small">소원저장소에 넣은 열쇠를 그대로 써도 돼요(같은 저장소). 소원저장소 설정의 복구 링크를 복사해 여기 붙여넣어도 돼요. 복구 링크를 아이폰 메모에 저장해 두면 열쇠가 사라져도 한 번 눌러 되찾아요. 링크 자체가 열쇠라 남에게 보내지 마세요.</p>
@@ -182,10 +188,9 @@
         <summary>열쇠 발급 방법 보기</summary>
         <ol class="steps">
           <li>아래 버튼으로 GitHub 열쇠 발급 페이지를 열어요(로그인 필요).</li>
-          <li><b>Token name</b>에 <code>시드업자산</code>, <b>Expiration</b>은 1년 정도.</li>
-          <li><b>Repository access</b> → <b>Only select repositories</b> → <code>newlywed_tech</code>만 고르기.</li>
-          <li><b>Permissions → Repository permissions → Contents</b>를 <b>Read and write</b>로. (읽기만 하면 매매일지를 못 써요)</li>
-          <li><b>Generate token</b> → 나온 <code>github_pat_…</code>을 복사해서 위 칸에 붙여넣기.</li>
+          <li><b>Note</b>는 미리 채워져 있어요(sidup-phone). <b>Expiration</b>은 <b>No expiration</b>을 고르세요.</li>
+          <li><b>repo</b> 칸이 체크된 그대로 두고, 맨 아래 초록 <b>Generate token</b>을 누르세요.</li>
+          <li>나온 <code>ghp_…</code>를 복사해서 위 칸에 붙여넣기. (그 화면을 벗어나면 다시 못 봐요)</li>
         </ol>
         <a id="tokenLink" class="link-btn" target="_blank" rel="noopener noreferrer">열쇠 발급 페이지 열기 ↗</a>
       </details>

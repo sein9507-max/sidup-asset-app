@@ -11,7 +11,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.4.2';
+  const VERSION = '1.4.3';
   const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', logo: 'auto', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
@@ -78,6 +78,7 @@
     async get() { try { const d = await this.db(); return await new Promise((ok) => { const r = d.transaction('k').objectStore('k').get('cfg'); r.onsuccess = () => ok(r.result || null); r.onerror = () => ok(null); }); } catch { return null; } },
     async del() { try { const d = await this.db(); d.transaction('k', 'readwrite').objectStore('k').delete('cfg'); } catch { /* 무시 */ } },
   };
+  const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=repo&description=sidup-phone';
   const askPersist = () => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch { /* 무시 */ } };
   const keySnap = () => ({ token: cfg.token || '', pin: cfg.rememberPin !== false ? (cfg.pin || '') : '' });
   function takeRescue() {
@@ -220,15 +221,16 @@
     $('#lock').hidden = false; $('#main').hidden = true;
     $('#lockTitle').textContent = title; $('#lockHint').textContent = hint;
     const m = $('#lockMsg'); m.textContent = msg || ''; m.className = 'msg' + (cls ? ' ' + cls : '');
-    const canUnlock = !!(cfg.token || store.get('sa.enc'));
-    $('#pin').disabled = !canUnlock; $('#unlockBtn').disabled = !canUnlock;
+    const needKey = !cfg.token;   // 1.4.3: 열쇠가 없으면 잠금 화면에서 바로 붙여넣기(설정까지 안 가도 됨). PIN 칸은 늘 켜 둔다
+    $('#lockKey').hidden = !needKey; $('#lockKeyHelp').hidden = !needKey; $('#lockTokenLink').href = TOKEN_URL;
+    $('#pin').disabled = false; $('#unlockBtn').disabled = false;
   }
 
   async function load(opts = {}) {
     hideBanner();
     if (!cfg.token && !store.get('sa.enc')) {
       setPill('열쇠 필요', 'is-err');
-      showLock('열쇠가 필요해요', '설정 ⚙에서 GitHub 열쇠를 넣으면 저장소의 암호화 자료를 받아와요.');
+      showLock('열쇠가 필요해요', pin() ? 'PIN은 받아 뒀어요 ✔ 아래 칸에 열쇠만 붙여넣으면 바로 열려요.' : '아래 칸에 열쇠(또는 소원저장소 복구 링크)를 붙여넣고, PIN 6자리를 넣어 주세요.');
       showBanner('먼저 <button id="goSettings" type="button">설정에서 열쇠 넣기</button> — 열쇠는 이 휴대폰에만 저장돼요.');
       $('#goSettings').onclick = openSettings;
       return;
@@ -932,8 +934,7 @@
     $('#repoLabel').textContent = `${cfg.owner}/${cfg.repo}`;
     $('#token').value = cfg.token;
     $('#income').value = cfg.income || ''; $('#budget').value = cfg.budget || ''; $('#emergencyIn').value = cfg.emergency ?? '';
-    const q = new URLSearchParams({ name: '시드업자산', description: '시드업자산 앱 — newlywed_tech 저장소 Contents 읽기·쓰기', target_name: cfg.owner, contents: 'write' });
-    $('#tokenLink').href = `https://github.com/settings/personal-access-tokens/new?${q}`;
+    $('#tokenLink').href = TOKEN_URL;   // 1.4.3: 세밀 열쇠(한글 이름 미리 채움) 페이지에서 Generate 가 먹통 → 만료 없는 classic 열쇠(소원저장소 1.9.0과 같음)
     $('#connectMsg').textContent = ''; $('#mineMsg').textContent = '';
     $('#verLine').textContent = `SEEDUP ASSET v${VERSION} · 저장 공간 ${store.ok ? '정상' : '막힘(사생활 보호 모드?)'}`;
     $('#settings').showModal();
@@ -942,9 +943,20 @@
     $('#guide').showModal();
     if (section === 'capture') { const c = $$('#guide .card')[1]; c && c.scrollIntoView({ block: 'start' }); }
   }
+  function parseTok(v) {   // 열쇠 글자 또는 소원저장소·시드업자산 복구 링크(#k=)
+    let t = String(v || '').trim();
+    if (t.includes('#k=')) { try { t = atob(decodeURIComponent(t.split('#k=')[1].trim())); } catch { t = ''; } }
+    return t.replace(/\s/g, '');
+  }
+  async function lockKey() {
+    const tok = parseTok($('#lockToken').value); const m = $('#lockMsg');
+    if (!/^(gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}$/.test(tok)) { m.textContent = '열쇠 모양이 아니에요. ghp_로 시작하는 글자나 복구 링크를 붙여넣어 주세요'; m.className = 'msg err'; return; }
+    m.textContent = '확인 중…'; m.className = 'msg'; const before = cfg.token; cfg.token = tok;
+    try { await gh(repoPath()); saveCfg(); vault.put(keySnap()); askPersist(); $('#lockToken').value = ''; m.textContent = '열쇠 OK ✔ 이제 PIN을 넣어 주세요'; m.className = 'msg ok'; load(); }
+    catch (e) { cfg.token = before; m.textContent = e.message; m.className = 'msg err'; }
+  }
   async function connect() {
-    let tok = $('#token').value.trim(); const msg = $('#connectMsg');
-    if (tok.includes('#k=')) { try { tok = atob(decodeURIComponent(tok.split('#k=')[1].trim())); } catch { tok = ''; } }   // 소원저장소 복구 링크를 붙여넣어도 열쇠로 받는다
+    const tok = parseTok($('#token').value); const msg = $('#connectMsg');
     if (!tok) { msg.textContent = '열쇠를 붙여넣어 주세요'; msg.className = 'msg err'; return; }
     cfg.token = tok; saveCfg(); msg.textContent = '확인 중…'; msg.className = 'msg';
     try {
@@ -1041,6 +1053,8 @@
       if (!/^\d{4,8}$/.test(v)) { const m = $('#lockMsg'); m.textContent = 'PIN은 숫자 4~8자리예요'; m.className = 'msg err'; return; }
       sessionPin = v; cfg.rememberPin = $('#rememberPin').checked; if (cfg.rememberPin) cfg.pin = v; saveCfg(); vault.put(keySnap()); $('#pin').value = ''; load();
     });
+    $('#lockKeyBtn').addEventListener('click', lockKey);
+    $('#lockToken').addEventListener('keydown', (e) => { if (e.key === 'Enter') lockKey(); });
     $('#pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
     $('#pinForget').addEventListener('click', () => { cfg.pin = ''; sessionPin = ''; data = null; saveCfg(); vault.del(); $('#settings').close(); load(); });
     $('#forgetBtn').addEventListener('click', () => {
