@@ -11,7 +11,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.4.1';
+  const VERSION = '1.4.2';
   const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', logo: 'auto', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
@@ -943,7 +943,8 @@
     if (section === 'capture') { const c = $$('#guide .card')[1]; c && c.scrollIntoView({ block: 'start' }); }
   }
   async function connect() {
-    const tok = $('#token').value.trim(); const msg = $('#connectMsg');
+    let tok = $('#token').value.trim(); const msg = $('#connectMsg');
+    if (tok.includes('#k=')) { try { tok = atob(decodeURIComponent(tok.split('#k=')[1].trim())); } catch { tok = ''; } }   // 소원저장소 복구 링크를 붙여넣어도 열쇠로 받는다
     if (!tok) { msg.textContent = '열쇠를 붙여넣어 주세요'; msg.className = 'msg err'; return; }
     cfg.token = tok; saveCfg(); msg.textContent = '확인 중…'; msg.className = 'msg';
     try {
