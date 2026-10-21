@@ -14,9 +14,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="시드업자산">
 <meta name="format-detection" content="telephone=no">
-<link id="manifestLink" rel="manifest" href="manifest-C.webmanifest">
-<link id="touchIcon" rel="apple-touch-icon" href="icons/C/apple-touch-icon.png">
-<link id="favIcon" rel="icon" type="image/png" sizes="192x192" href="icons/C/icon-192.png">
+<link id="manifestLink" rel="manifest" href="manifest-1.webmanifest">
+<link id="touchIcon" rel="apple-touch-icon" href="icons/1/apple-touch-icon.png">
+<link id="favIcon" rel="icon" type="image/png" sizes="192x192" href="icons/1/icon-192.png">
 <link rel="preload" href="fonts/Orbit-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 </head>
@@ -26,7 +26,7 @@
 <div id="app">
   <header class="top">
     <div class="brand">
-      <img id="brandIcon" class="brand-icon" src="icons/C/icon-192.png" alt="" width="36" height="36">
+      <img id="brandIcon" class="brand-icon" src="icons/1/icon-192.png" alt="" width="36" height="36">
       <div class="brand-text">
         <h1>시드업자산</h1>
         <p>자산 ◆ 지출 ◆ 매매 코치</p>
@@ -45,7 +45,7 @@
   <!-- 잠금(열쇠·PIN 전) -->
   <section id="lock" class="lock" hidden>
     <div class="bezel"><div class="inner">
-      <div class="vault" aria-hidden="true">₩</div>
+      <img id="lockLogo" class="lock-logo" src="icons/1/icon-192.png" alt="" width="104" height="104">
       <h2 id="lockTitle">금고가 잠겨 있어요</h2>
       <p id="lockHint">PIN 6자리를 넣으면 저장소의 암호화 자료를 이 휴대폰에서만 풀어요.</p>
       <div class="pin-box">
@@ -209,9 +209,13 @@
     </div>
 
     <div class="card">
-      <h3>④ 테마 · 로고</h3>
-      <div id="logoGrid" class="logo-grid" role="group" aria-label="테마 고르기"></div>
-      <p class="hint small">앱 안 색은 바로 바뀌어요. 홈 화면 아이콘은 "홈 화면에 추가"할 때 찍히는 그림이라, 바꾸려면 아이콘을 지우고 다시 추가해야 해요.</p>
+      <h3>④ 테마 · 로고 변경</h3>
+      <p class="lbl">테마(앱 안 색)</p>
+      <div id="themeGrid" class="logo-grid theme-grid" role="group" aria-label="테마 고르기"></div>
+      <p class="lbl">로고 변경</p>
+      <div id="logoGrid" class="logo-grid logo-pick" role="group" aria-label="로고 고르기"></div>
+      <p id="logoNow" class="hint small"></p>
+      <p class="hint small">홈 화면 아이콘을 바꾸려면 다시 추가해야 해요. (아이콘은 "홈 화면에 추가"할 때 그날 로고로 찍혀요)</p>
     </div>
 
     <div class="card">
@@ -219,7 +223,7 @@
       <ol class="steps">
         <li>아이폰 <b>Safari</b>로 이 주소를 열어요.</li>
         <li>아래쪽 <b>공유 버튼</b>(네모에서 화살표가 위로)을 눌러요.</li>
-        <li><b>홈 화면에 추가</b>를 누르면 동전 아이콘이 생겨요.</li>
+        <li><b>홈 화면에 추가</b>를 누르면 그날 로고로 아이콘이 생겨요.</li>
         <li>열쇠·PIN은 <b>홈 화면 앱을 연 뒤</b>에 넣어요. (Safari와 앱은 저장 공간이 따로예요)</li>
       </ol>
     </div>

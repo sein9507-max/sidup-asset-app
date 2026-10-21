@@ -7,6 +7,17 @@
 - GitHub 열쇠(fine-grained token)와 PIN은 **휴대폰 브라우저 localStorage 에만** 둔다.
 - 매매일지는 `시드업자산/매매일지/YYYY-MM.jsonl` 에 한 줄씩 덧붙인다(저장소가 비공개라 평문. 금액 자료와 달리 클로드 루틴이 읽고 복기 피드백을 줄 수 있게).
 
+## 로고 5종 (1.4.0 — 날마다 자동 순환)
+`icons/1~5/`(icon-192·icon-512·apple-touch-icon 180) + `manifest-1~5.webmanifest`. 모아보기 `icons/_시안_모아보기.png`. 그리는 스크립트 `_design/make_icons.py`(PIL). 테마(앱 안 색)와 로고는 따로다.
+1. **크롬 코인** — 크롬 톱니 테두리 금화, 라임 동전면에 ₩ 각인
+2. **코인 스택** — 검정·크롬 동전 더미 3줄 위로 라임 상승 화살표
+3. **픽셀 새싹** — 둥근 크롬 베젤 화면 안, 씨앗 동전에서 돋는 라임 새싹 픽셀
+4. **홀로 카드** — 라임·보라 홀로그램 카드 위 크롬 ₩
+5. **레트로 차트** — 옛 Mac 창 제목줄 + 라임 캔들 상승 차트
+- **자동(기본)**: 헤더·잠금 화면 로고가 날마다 바뀐다. 1970-01-01부터 지난 날 수 % 5 → 1~5 (이 기기 날짜 기준, 같은 날엔 언제 열어도 같은 로고).
+- **고정**: 설정 ④ '로고 변경'에서 하나를 누르면 그 로고로 고정, '자동'을 누르면 다시 순환.
+- **홈 화면 아이콘**: iOS 는 "홈 화면에 추가"할 때 아이콘을 고정한다. 앱은 지금 로고(자동이면 오늘 로고)의 `manifest-<n>` 와 `apple-touch-icon` 으로 `<link>` 를 바꿔 두므로, 바꾸려면 홈 화면 아이콘을 지우고 다시 추가한다.
+
 ## 탭 5개 (1.3.0 — 첫 화면은 '조언', 기본 테마 C 블랙 크롬 라임)
 > **본인 전용 앱이다.** 조언 탭은 사용자 한 사람의 보유 종목에 대한 종목별 조언을 담는다. 회원·공개용으로 배포하거나 같은 내용을 남에게 팔면 유사투자자문·투자자문업 문제가 생기므로 **회원 배포 금지**.
 
@@ -41,8 +52,8 @@
 
 ## 로컬 미리보기·검증
 ```
-python3 _design/make_icons.py     # 아이콘 3종 다시 그리기
-python3 _design/test_app.py       # 헤드리스 크롬(--use-mock-keychain) + 가짜 GitHub 로 22항목 검증(조언 탭·컨디션·차트·뉴스 2줄·평단 계산기 포함), _design/preview/*.png
+python3 _design/make_icons.py     # 로고 5종 다시 그리기 + icons/_시안_모아보기.png
+python3 _design/test_app.py       # 헤드리스 크롬(--use-mock-keychain) + 가짜 GitHub 로 23항목 검증(조언 탭·컨디션·차트·뉴스 2줄·평단 계산기·로고 순환 포함), _design/preview/*.png
 python3 _design/test_app.py --진짜  # 맥북의 실제 data.json 으로 5탭·조언 스크린샷 _design/preview/진짜_v4_*.png (실제 저장소엔 아무것도 안 씀)
 ```
 
@@ -60,4 +71,4 @@ python3 _design/test_app.py --진짜  # 맥북의 실제 data.json 으로 5탭·
 5. 고칠 때마다: 파일 수정 → `sw.js` 의 `CACHE` 버전 올리기 → 커밋·푸시. 휴대폰은 다음에 열 때 새 버전을 받는다.
 
 ## 만든 것
-순수 HTML·CSS·JS. 빌드 도구 없음. 글꼴: [Orbit](https://github.com/JAMO-TYPEFACE/Orbit) (SIL Open Font License 1.1, `fonts/LICENSE-Orbit.txt`). 테마 3종(블랙 크롬 라임 기본·민트 크롬·라벤더 홀로)은 `app.css` 맨 위 토큰. 설정 ④에서 바꿀 수 있다.
+순수 HTML·CSS·JS. 빌드 도구 없음. 글꼴: [Orbit](https://github.com/JAMO-TYPEFACE/Orbit) (SIL Open Font License 1.1, `fonts/LICENSE-Orbit.txt`). 테마 3종(블랙 크롬 라임 기본·민트 크롬·라벤더 홀로)은 `app.css` 맨 위 토큰. 설정 ④에서 바꿀 수 있다(로고와 따로).

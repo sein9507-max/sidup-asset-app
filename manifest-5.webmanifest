@@ -1,0 +1,32 @@
+{
+  "name": "시드업자산 · 가계부 + 매매 코치",
+  "short_name": "시드업자산",
+  "description": "가계부와 주식 매매 코치. 숫자는 내 비공개 저장소에 암호화돼 있고 PIN으로만 열린다",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1218",
+  "theme_color": "#0F1218",
+  "icons": [
+    {
+      "src": "icons/5/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/5/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/5/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

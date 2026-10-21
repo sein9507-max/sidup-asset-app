@@ -3,16 +3,20 @@
  *        종목별 조언 + 일봉 차트(<dir>/차트/<코드>.png, 금액 정보 없음) · 직접 계획(옛 체크 탭)은 접어서 아래로.
  * 1.3.0: 종목 카드 = 뉴스 근거 2줄(🔴 팔 이유·🟢 살 이유, 맥북이 최근 7일 뉴스에서 고름) → 차트 분석 → 평단 계산기(몇 주 → 금액·새 평단·비중·현금).
  *        직접 계획은 설정 ⑧ 고급으로, 중단 신호 점검은 컨디션 아래 한 줄 접힘.
+ * 1.4.0: 로고 5종(icons/1~5) — 헤더·잠금 화면 로고는 날마다 순환(자동) 또는 고정 선택. 홈 화면 아이콘은 고른(자동이면 오늘) 로고의
+ *        manifest-<n>.webmanifest·apple-touch-icon 으로 <link> 를 바꿔 둔다(iOS 는 추가할 때 고정). 테마(색)와 로고는 따로.
  * 자료: 비공개 저장소 <dir>/data.enc.json (맥북 정리 스크립트가 PIN 으로 AES-GCM 암호화해 올림) → 이 휴대폰에서만 복호화.
  * 매매일지: <dir>/매매일지/YYYY-MM.jsonl 에 한 줄씩 덧붙임 (GitHub Contents API).
  * 열쇠(토큰)·PIN 은 이 기기의 localStorage 에만 둔다. 외부 요청은 api.github.com 하나뿐(CSP). 증권사·카드사 로그인은 없다. */
 (() => {
   'use strict';
 
-  const VERSION = '1.3.0';
-  const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', income: 0, budget: 0, emergency: null, targets: {} };
+  const VERSION = '1.4.0';
+  const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', logo: 'auto', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
+  const LOGOS = { 1: '크롬 코인', 2: '코인 스택', 3: '픽셀 새싹', 4: '홀로 카드', 5: '레트로 차트' };
+  const LOGO_KEYS = Object.keys(LOGOS);
   const UNDO_MS = 4000;                          // 저장 뒤 되돌리기 가능한 시간(그동안은 올리지 않고 기다림)
   const nowD = () => (window.__SA_NOW ? new Date(window.__SA_NOW) : new Date());   // 검증용 시각 바꿔치기
   const STYLES = ['단타(당일)', '스윙(며칠~몇 주)', '포지션(몇 달)', '장기(1년+)'];
@@ -876,10 +880,29 @@
   function applyTheme(t) {
     if (!THEMES[t]) t = 'C';
     document.documentElement.dataset.theme = t;
-    $('#manifestLink').href = `manifest-${t}.webmanifest`;
-    $('#touchIcon').href = `icons/${t}/apple-touch-icon.png`; $('#favIcon').href = `icons/${t}/icon-192.png`; $('#brandIcon').src = `icons/${t}/icon-192.png`;
     $('meta[name=theme-color]').content = THEMES[t].color;
-    $('#logoGrid').innerHTML = Object.entries(THEMES).map(([k, v]) => `<button type="button" data-theme="${k}" class="${k === t ? 'is-on' : ''}"><img src="icons/${k}/icon-192.png" alt="" width="52" height="52">${v.name}</button>`).join('');
+    $('#themeGrid').innerHTML = Object.entries(THEMES).map(([k, v]) => `<button type="button" data-theme="${k}" class="${k === t ? 'is-on' : ''}"><i class="swatch sw-${k}" aria-hidden="true"></i>${v.name}</button>`).join('');
+  }
+  // 로고: 자동이면 날짜(이 기기 기준 하루)마다 1→2→…→5→1 순환. 같은 날엔 언제 열어도 같은 로고.
+  const dayLogo = (d = nowD()) => { const n = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000); return LOGO_KEYS[((n % LOGO_KEYS.length) + LOGO_KEYS.length) % LOGO_KEYS.length]; };
+  const logoChoice = () => (LOGOS[cfg.logo] ? String(cfg.logo) : 'auto');
+  const currentLogo = () => (logoChoice() === 'auto' ? dayLogo() : logoChoice());
+  function applyLogo() {
+    const k = currentLogo(), icon = `icons/${k}/icon-192.png`;
+    if ($('#manifestLink').getAttribute('href') !== `manifest-${k}.webmanifest`) $('#manifestLink').href = `manifest-${k}.webmanifest`;
+    $('#touchIcon').href = `icons/${k}/apple-touch-icon.png`; $('#favIcon').href = icon;
+    $('#brandIcon').src = icon; $('#lockLogo').src = icon;
+    document.documentElement.dataset.logo = k;
+    renderLogoPicker();
+  }
+  function renderLogoPicker() {
+    const choice = logoChoice(), today = dayLogo();
+    const tomorrow = dayLogo(new Date(nowD().getTime() + 86400000));
+    $('#logoGrid').innerHTML = `<button type="button" data-logo="auto" class="${choice === 'auto' ? 'is-on' : ''}" aria-pressed="${choice === 'auto'}"><span class="auto-ico" aria-hidden="true"><img src="icons/${today}/icon-192.png" alt="" width="52" height="52"><b>AUTO</b></span>자동(매일)</button>` +
+      LOGO_KEYS.map((k) => `<button type="button" data-logo="${k}" class="${choice === k ? 'is-on' : ''}" aria-pressed="${choice === k}"><img src="icons/${k}/icon-192.png" alt="" width="52" height="52">${k}. ${LOGOS[k]}</button>`).join('');
+    $('#logoNow').textContent = choice === 'auto'
+      ? `지금은 자동이에요. 날마다 5종이 차례로 바뀌어요. (오늘 ${today}. ${LOGOS[today]} · 내일 ${tomorrow}. ${LOGOS[tomorrow]})`
+      : `지금은 ${choice}. ${LOGOS[choice]} 로고로 고정돼 있어요. '자동'을 누르면 날마다 바뀌어요.`;
   }
   function openSettings() {
     $('#repoLabel').textContent = `${cfg.owner}/${cfg.repo}`;
@@ -991,13 +1014,14 @@
       if (!confirm('이 휴대폰의 열쇠·PIN·담아둔 자료·대기 중인 기록을 모두 지울까요? (저장소의 자료는 그대로예요)')) return;
       ['sa.cfg', 'sa.enc', 'sa.journal', 'sa.memos', 'sa.conds', 'sa.queue', 'sa.check', 'sa.tab', 'sa.seenBrief'].forEach((k) => store.del(k));
       try { Object.keys(localStorage).filter((k) => k.startsWith('sa.chart.')).forEach((k) => store.del(k)); } catch { /* 무시 */ }
-      cfg = { ...DEFAULT_CFG, theme: cfg.theme }; sessionPin = ''; data = null; journal = {}; memos = {}; conds = {}; queue = []; saveCfg(); $('#settings').close(); load();
+      cfg = { ...DEFAULT_CFG, theme: cfg.theme, logo: cfg.logo }; sessionPin = ''; data = null; journal = {}; memos = {}; conds = {}; queue = []; saveCfg(); $('#settings').close(); load();
     });
     $('#saveMine').addEventListener('click', () => {
       cfg.income = +$('#income').value || 0; cfg.budget = +$('#budget').value || 0; const e = $('#emergencyIn').value.trim(); cfg.emergency = e === '' ? null : +e; saveCfg();
       $('#mineMsg').textContent = '저장했어요'; $('#mineMsg').className = 'msg ok'; if (data) { renderToday(); renderSpend(); }
     });
-    $('#logoGrid').addEventListener('click', (e) => { const b = e.target.closest('button[data-theme]'); if (!b) return; cfg.theme = b.dataset.theme; saveCfg(); applyTheme(cfg.theme); });
+    $('#themeGrid').addEventListener('click', (e) => { const b = e.target.closest('button[data-theme]'); if (!b) return; cfg.theme = b.dataset.theme; saveCfg(); applyTheme(cfg.theme); });
+    $('#logoGrid').addEventListener('click', (e) => { const b = e.target.closest('button[data-logo]'); if (!b) return; cfg.logo = b.dataset.logo; saveCfg(); applyLogo(); });
     $('#openGuide').addEventListener('click', () => openGuide());
     // 조언
     $('#condRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setCondition(+b.dataset.v); });
@@ -1057,12 +1081,13 @@
     $('#wkThis').addEventListener('click', () => { reviewWeek = 0; $('#wkThis').classList.add('is-on'); $('#wkLast').classList.remove('is-on'); renderReview(); });
     $('#wkLast').addEventListener('click', () => { reviewWeek = -1; $('#wkLast').classList.add('is-on'); $('#wkThis').classList.remove('is-on'); renderReview(); });
     window.addEventListener('online', () => { if (data) flush(); });
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && data) { renderTodo(); renderBadges(); } });
-    setInterval(() => { if (data) { renderTodo(); renderBadges(); } }, 60000);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) return; applyLogo(); if (data) { renderTodo(); renderBadges(); } });
+    setInterval(() => { if (logoChoice() === 'auto' && document.documentElement.dataset.logo !== dayLogo()) applyLogo(); if (data) { renderTodo(); renderBadges(); } }, 60000);
   }
 
   // ── 시작 ────────────────────────────────────────────────
   applyTheme(cfg.theme);
+  applyLogo();
   bind();
   $('#rememberPin').checked = cfg.rememberPin !== false;
   showTab('advice');                             // 앱을 열면 언제나 조언부터
