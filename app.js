@@ -423,7 +423,7 @@
     const rows = [];
     if (r.side === 'buy') {
       rows.push(['매수 금액', `${money(r.amt)}`, `${num(q, 4)}주 × ${esc(px2(p, r.ccy))}${usd ? ` · 환율 ${num(r.fx, 1)}원` : ''}`]);
-      rows.push([r.first ? '첫 매수 평단' : '새 평단', `<b class="calc-big">${esc(px2(r.newAvg, r.ccy))}</b>`, r.first ? '첫 매수' : `지금 ${esc(px2(r.avg, r.ccy))} → 평단 변화 <b class="${sgn(r.avgChg)}">${esc(pct(r.avgChg, 1).replace('-', '−'))}</b>`]);
+      rows.push([r.first ? '첫 매수 평단' : '새 평단', `<b class="calc-big">${esc(px2(r.newAvg, r.ccy))}</b>`, r.first ? '첫 매수' : `지금 ${esc(px2(r.avg, r.ccy))} → 평단 변화 <b class="${sgn(r.avgChg)}">${esc(pct(r.avgChg, Math.abs(r.avgChg) < 1 ? 2 : 1).replace('-', '−'))}</b>`]);
       rows.push(['매수 뒤 비중', `${num(r.weight, 1)}%`, `투자자산 중 · ${num(r.newQty, 4)}주`]);
       rows.push(['현금', r.cashLeft >= 0 ? `<span class="good">${esc(won(r.cashLeft))} 남음</span>` : `<span class="bad">${esc(won(-r.cashLeft))} 부족</span>`, `현금 ${esc(won(r.cash))} 대비`]);
     } else {
