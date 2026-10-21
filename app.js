@@ -11,7 +11,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
   const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', logo: 'auto', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
@@ -70,6 +70,30 @@
 
   // ── 상태 ────────────────────────────────────────────────
   let cfg = { ...DEFAULT_CFG, ...store.get('sa.cfg', {}) };
+  // 1.4.1 (2026-10-21, 소원저장소에서 "열쇠가 자꾸 없다" 문제와 같은 원인): 아이폰이 localStorage 를 비우거나 브라우저마다 저장소가 따로라 열쇠가 사라진다.
+  //  ① 열쇠·PIN(기억 켠 경우)을 IndexedDB 에도 두고 비면 되살린다 ② storage.persist() ③ 복구 링크 #k=<base64 열쇠> (해시라 서버로 안 감)
+  const vault = {
+    db() { return new Promise((ok, no) => { try { const r = indexedDB.open('sidup-keys', 1); r.onupgradeneeded = () => r.result.createObjectStore('k'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); } catch (e) { no(e); } }); },
+    async put(v) { try { const d = await this.db(); await new Promise((ok) => { const t = d.transaction('k', 'readwrite'); t.objectStore('k').put(v, 'cfg'); t.oncomplete = ok; t.onerror = ok; }); } catch { /* 무시 */ } },
+    async get() { try { const d = await this.db(); return await new Promise((ok) => { const r = d.transaction('k').objectStore('k').get('cfg'); r.onsuccess = () => ok(r.result || null); r.onerror = () => ok(null); }); } catch { return null; } },
+    async del() { try { const d = await this.db(); d.transaction('k', 'readwrite').objectStore('k').delete('cfg'); } catch { /* 무시 */ } },
+  };
+  const askPersist = () => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch { /* 무시 */ } };
+  const keySnap = () => ({ token: cfg.token || '', pin: cfg.rememberPin !== false ? (cfg.pin || '') : '' });
+  function takeRescue() {
+    if (!location.hash.startsWith('#k=')) return '';
+    let t = ''; try { t = atob(decodeURIComponent(location.hash.slice(3))); } catch { t = ''; }
+    try { history.replaceState(null, '', location.pathname + location.search); } catch { location.hash = ''; }
+    return /^(gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}$/.test(t) ? t : '';
+  }
+  async function restoreKeys() {
+    const link = takeRescue();
+    if (link) { cfg.token = link; saveCfg(); vault.put(keySnap()); askPersist(); return true; }
+    if (cfg.token) { vault.put(keySnap()); return false; }
+    const v = await vault.get();
+    if (v && v.token) { cfg.token = v.token; if (v.pin && !cfg.pin) cfg.pin = v.pin; saveCfg(); return true; }
+    return false;
+  }
   let sessionPin = '';
   let data = null;                               // 복호화된 자료
   let dataFrom = '';                             // 'github' | 'local'
@@ -925,7 +949,7 @@
     try {
       const r = await gh(repoPath());
       msg.textContent = `연결됐어요 · ${r.full_name}${r.permissions?.push ? '' : ' (쓰기 권한 없음 — 매매일지는 못 올려요)'}`; msg.className = 'msg ok';
-      load();
+      vault.put(keySnap()); askPersist(); load();
     } catch (e) { msg.textContent = e.message; msg.className = 'msg err'; }
   }
 
@@ -1001,15 +1025,23 @@
     $$('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
     $$('dialog.sheet').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));   // 바깥 누르면 닫기
     $('#connectBtn').addEventListener('click', connect);
+    $('#rescueBtn').addEventListener('click', async () => {
+      const msg = $('#connectMsg');
+      if (!cfg.token) { msg.textContent = '열쇠를 먼저 넣어 주세요'; msg.className = 'msg err'; return; }
+      const link = location.origin + location.pathname + '#k=' + encodeURIComponent(btoa(cfg.token));
+      try { await navigator.clipboard.writeText(link); msg.textContent = '복구 링크를 복사했어요. 아이폰 메모에 붙여넣고 잠가 두세요 🔒'; msg.className = 'msg ok'; }
+      catch { prompt('이 링크를 길게 눌러 복사해서 메모에 저장해 두세요', link); }
+    });
+    window.addEventListener('hashchange', () => { if (location.hash.startsWith('#k=')) restoreKeys().then((ok) => { if (ok) load(); }); });
     $('#syncPill').addEventListener('click', () => load());
     $('#refreshBtn').addEventListener('click', () => { $('#settings').close(); load(); });
     $('#unlockBtn').addEventListener('click', () => {
       const v = $('#pin').value.trim();
       if (!/^\d{4,8}$/.test(v)) { const m = $('#lockMsg'); m.textContent = 'PIN은 숫자 4~8자리예요'; m.className = 'msg err'; return; }
-      sessionPin = v; cfg.rememberPin = $('#rememberPin').checked; if (cfg.rememberPin) cfg.pin = v; saveCfg(); $('#pin').value = ''; load();
+      sessionPin = v; cfg.rememberPin = $('#rememberPin').checked; if (cfg.rememberPin) cfg.pin = v; saveCfg(); vault.put(keySnap()); $('#pin').value = ''; load();
     });
     $('#pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
-    $('#pinForget').addEventListener('click', () => { cfg.pin = ''; sessionPin = ''; data = null; saveCfg(); $('#settings').close(); load(); });
+    $('#pinForget').addEventListener('click', () => { cfg.pin = ''; sessionPin = ''; data = null; saveCfg(); vault.del(); $('#settings').close(); load(); });
     $('#forgetBtn').addEventListener('click', () => {
       if (!confirm('이 휴대폰의 열쇠·PIN·담아둔 자료·대기 중인 기록을 모두 지울까요? (저장소의 자료는 그대로예요)')) return;
       ['sa.cfg', 'sa.enc', 'sa.journal', 'sa.memos', 'sa.conds', 'sa.queue', 'sa.check', 'sa.tab', 'sa.seenBrief'].forEach((k) => store.del(k));
@@ -1091,6 +1123,7 @@
   bind();
   $('#rememberPin').checked = cfg.rememberPin !== false;
   showTab('advice');                             // 앱을 열면 언제나 조언부터
-  load();
+  askPersist();
+  restoreKeys().finally(() => load());
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

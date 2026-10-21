@@ -175,8 +175,9 @@
       <p class="hint">내 비공개 저장소(<b id="repoLabel"></b>)의 암호화 자료를 읽고 매매일지를 쌓으려면 GitHub 전용 열쇠가 필요해요. 열쇠는 이 휴대폰 안에만 저장돼요.</p>
       <label class="sr-only" for="token">GitHub 열쇠</label>
       <input id="token" class="field" type="password" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_… 붙여넣기">
-      <div class="btn-row"><button id="connectBtn" class="btn pri small" type="button">저장하고 연결 확인</button></div>
+      <div class="btn-row"><button id="connectBtn" class="btn pri small" type="button">저장하고 연결 확인</button><button id="rescueBtn" class="btn small" type="button">📋 열쇠 복구 링크 복사</button></div>
       <p id="connectMsg" class="msg" role="status"></p>
+      <p class="hint small">소원저장소에 넣은 열쇠를 그대로 써도 돼요(같은 저장소). 복구 링크를 아이폰 메모에 저장해 두면 열쇠가 사라져도 한 번 눌러 되찾아요. 링크 자체가 열쇠라 남에게 보내지 마세요.</p>
       <details>
         <summary>열쇠 발급 방법 보기</summary>
         <ol class="steps">
