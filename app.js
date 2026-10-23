@@ -11,7 +11,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.4.3';
+  const VERSION = '1.4.4';
   const DEFAULT_CFG = { owner: 'sein9507-max', repo: 'newlywed_tech', branch: 'main', dir: '시드업자산', token: '', pin: '', rememberPin: true, theme: 'C', logo: 'auto', income: 0, budget: 0, emergency: null, targets: {} };
   const API = 'https://api.github.com';
   const THEMES = { A: { name: '민트 크롬', color: '#CDF4E4' }, B: { name: '라벤더 홀로', color: '#E1D6FF' }, C: { name: '블랙 크롬 라임', color: '#0F1218' } };
@@ -364,10 +364,10 @@
         `<ol class="brief-lines">${b.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ol>` +
         newsMini(b.news) +
         `${b.stance || b.phase ? `<div class="brief-meta">${b.stance ? `오늘 태도 <b>${esc(b.stance)}</b>` : ''}${b.phase ? ` · 국면 <b>${esc(b.phase)}</b>` : ''}</div>` : ''}${warn}</div>`;
-    }).join('') : '<div class="card brief-card"><div class="empty"><b>아직 장전 브리핑이 없어요</b>맥북이 평일 07:00(코스피)·22:00(나스닥)에 1~3줄로 써요</div></div>';
+    }).join('') : '<div class="card brief-card"><div class="empty"><b>아직 장전 브리핑이 없어요</b>맥북이 평일 07:00(코스피)·22:00(나스닥)에 1~3줄로 써요. 종목 조언은 15:00·23:00에 한 번 더 고쳐요</div></div>';
     // 종목 조언
     const items = adv?.items || [];
-    $('#advAt').textContent = adv?.itemsAt ? `${stampKo(adv.itemsAt)} · ${adv.itemsSlot === 'kr' ? '코스피' : '나스닥'} 장전 때` : '';
+    $('#advAt').textContent = adv?.itemsAt ? `${stampKo(adv.itemsAt)} · ${({ kr: '코스피 장전 때', kr2: '코스피 오후 업데이트', us: '나스닥 장전 때', us2: '나스닥 장초반 업데이트' })[adv.itemsSlot] || '나스닥 장전 때'}` : '';
     $('#advWarn').innerHTML = warn;
     $('#advList').innerHTML = items.length ? items.map((it, i) => {
       const h = holdingOf(it.code), ccy = it.ccy || h?.ccy || 'USD';
